@@ -1,14 +1,30 @@
 # wg-killswitch-nft
 An over-engineered Wireguard killswitch designed specifically for the modern "nftables" netfilter project for Linux machines. 
-Intended to be used with commercial VPN services such as Mullvad, AirVPN, Cryptostorm, AzireVPN, etc. 
+Intended to be used with commercial VPN services such as Mullvad, AirVPN, Cryptostorm, AzireVPN, etc, but can be used for or adapted to any Wireguard config. 
 
 # Features
  - Option to allow LAN traffic (disabled by default).
  - Option to log dropped packets (disabled by default).
+ - No hard-coded path to your configs.
  - Full IPv6 compatibility.
  - Follows many security best practices (set -euo pipefail, readonly variables, input validation, nftables with a default-drop policy, etc..) 
  - Avoids sending DNS requests outside of the tunnel for hostname lookup in your VPN config.
  - Relatively paranoid.
+
+# "Anti-features"
+ - The script resolves the VPN endpoint's domain name to an IP address once upon execution. If the server's IP address changes (due to load balancing, DDoS mitigation, or server migration), the killswitch will block the connection because the new IP is not in the nftables set
+    Possible solution: run a background process that periodically re-resolves the endpoint and updates the nftables set
+ - The script doesn’t handle multiple peers on different ports: we overwrite $EP_PORT on every loop iteration. If you ever wire up two peers, your rules will only allow the last peer’s port, silently dropping the other.
+    Possible solution: either assert that there’s only one peer, or build a per-port set (or require uniform ports).
+ - The script sets our three chains (input, output, forward) to policy drop but don’t install any ARP rules. ARP lives in the arp family, not inet, so still allowed by default. Usually good, but be aware you’re implicitly trusting link-layer.
+ - We don’t allow any DNS queries to go out the physical uplink, which is intentional, but you must be 100% sure every process is pointed at an internal DNS resolver or your VPN's internal resolver. Otherwise DNS simply fails rather than “leaks.”
+
+# Usage
+In your Wireguard config: 
+`[Interface]
+PostUp   =  /path/to/wg-killswitch-nft.sh up %i
+PostDown = /path/to/wg-killswitch-nft.sh down %i`
+The %i is important, that's how the script knows what our interface is called.
 
 # BSD 3-Clause License
 
