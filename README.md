@@ -1,20 +1,20 @@
 # wg-killswitch-nft
 An over-engineered Wireguard killswitch designed specifically for the modern "nftables" netfilter project for Linux machines. 
-Intended to be used with commercial VPN services such as Mullvad, AirVPN, Cryptostorm, AzireVPN, etc, but can be used for or adapted to any Wireguard config. 
+Intended to be used with commercial VPN services such as Mullvad, AirVPN, Cryptostorm, AzireVPN, and many others, but can be used for or adapted to any Wireguard config. 
 
 # Features
  - Option to allow LAN traffic (disabled by default).
  - Option to log dropped packets (disabled by default).
  - No hard-coded path to your configs.
  - Full IPv6 compatibility.
- - Follows many security best practices (set -euo pipefail, readonly variables, input validation, nftables with a default-drop policy, etc..) 
+ - Follows many security best practices (examples: set -euo pipefail, readonly variables, input validation, nftables with a default-drop policy) 
  - Avoids sending DNS requests outside of the tunnel for hostname lookup in your VPN config.
  - Relatively paranoid.
 
 # "Anti-features"
- - The script resolves the VPN endpoint's domain name to an IP address once upon execution. If the server's IP address changes (due to load balancing, DDoS mitigation, or server migration), the killswitch will block the connection because the new IP is not in the nftables set
+ - The script resolves the VPN endpoint's domain name to an IP address once upon execution. If the server's IP address changes (due to load balancing, DDoS mitigation, or server migration), the killswitch will block the connection because the new IP is not in the nftables set.
    
-    Possible solution: run a background process that periodically re-resolves the endpoint and updates the nftables set
+    Possible solution: run a background process that periodically re-resolves the endpoint and updates the nftables set.
  - The script doesn’t handle multiple peers on different ports: we overwrite $EP_PORT on every loop iteration. If you ever wire up two peers, your rules will only allow the last peer’s port, silently dropping the other.
    
     Possible solution: either assert that there’s only one peer, or build a per-port set (or require uniform ports).
@@ -29,6 +29,8 @@ PostUp   =  /path/to/wg-killswitch-nft.sh up %i
 PostDown = /path/to/wg-killswitch-nft.sh down %i`
 ```
 - The %i is important, that's how the script knows what our interface is called.
+
+"WireGuard" and the "WireGuard" logo are registered trademarks of Jason A. Donenfeld.
 
 # BSD 3-Clause License
 
