@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 #
 # A robust, secure killswitch for WireGuard using nftables.
+# Usage: /path/to/wg-killswitch-nft {up|down} <wg-interface>"
+
 # New: Checks for sleep and grep,
 # rate limited logging,
 # revised IPv4 and IPv6 validation,
 # Fixed missing Egress ICMPv6 / NDP rules,
-# revised IPv6 Endpoint Parsing,
-# some attempts to ensure we always pick the correct uplink interface
+# revised IPv6 Endpoint Parsing
 
 set -euo pipefail
 
 # --- Configuration ---
 readonly PRIORITY="-200"          # A high priority to preempt other rules.
-readonly POLL_ATTEMPTS=10         # How many times to check for a live endpoint.
-readonly POLL_INTERVAL=0.5        # Seconds to wait between poll attempts.
+readonly POLL_ATTEMPTS="10"        # How many times to check for a live endpoint.
+readonly POLL_INTERVAL="0.5"        # Seconds to wait between poll attempts.
 readonly ALLOW_LAN="false"        # Set to "true" to allow traffic to/from private RFC1918/ULA ranges.
 readonly ENABLE_LOGGING="false"    # Set to "true" to log and count dropped packets.
 
