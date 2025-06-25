@@ -20,11 +20,13 @@ Intended to be used with commercial VPN services such as Mullvad, AirVPN, Crypto
  - We don’t allow any DNS queries to go out the physical uplink, which is intentional, but you must be 100% sure every process is pointed at an internal DNS resolver or your VPN's internal resolver. Otherwise DNS simply fails rather than “leaks.”
 
 # Usage
-In your Wireguard config: 
-`[Interface]
+ - In your Wireguard config: 
+```
+[Interface]
 PostUp   =  /path/to/wg-killswitch-nft.sh up %i
 PostDown = /path/to/wg-killswitch-nft.sh down %i`
-The %i is important, that's how the script knows what our interface is called.
+```
+- The %i is important, that's how the script knows what our interface is called.
 
 # BSD 3-Clause License
 
