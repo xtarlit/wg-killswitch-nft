@@ -7,7 +7,8 @@
 # rate limited logging,
 # revised IPv4 and IPv6 validation,
 # Fixed missing Egress ICMPv6 / NDP rules,
-# revised IPv6 Endpoint Parsing
+# revised IPv6 Endpoint Parsing,
+# some attempts to ensure we always pick the correct uplink interface
 
 set -euo pipefail
 
