@@ -26,7 +26,7 @@ Intended to be used with commercial VPN services such as Mullvad, AirVPN, Crypto
 ```
 [Interface]
 PostUp   =  /path/to/wg-killswitch-nft.sh up %i
-PostDown = /path/to/wg-killswitch-nft.sh down %i`
+PostDown = /path/to/wg-killswitch-nft.sh down %i
 ```
 - The %i is important, that's how the script knows what our interface is called.
 
@@ -60,3 +60,6 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# This is for wireguard
+- "WireGuard" and the "WireGuard" logo are registered trademarks of Jason A. Donenfeld.
