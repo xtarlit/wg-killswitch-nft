@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 #
 # A robust, secure killswitch for WireGuard using nftables.
+# New: Checks for sleep and grep,
+# rate limited logging,
+# revised IPv4 and IPv6 validation,
+# Fixed missing Egress ICMPv6 / NDP rules,
+# revised IPv6 Endpoint Parsing,
+# some attempts to ensure we always pick the correct uplink interface
 
 set -euo pipefail
 
@@ -14,7 +20,7 @@ readonly ENABLE_LOGGING="false"    # Set to "true" to log and count dropped pack
 # --- Script setup ---
 # Set a sane, secure PATH and check for required commands.
 export PATH="/usr/sbin:/sbin:/usr/bin:/bin"
-readonly CMDS=(nft ip wg awk sed tr)
+readonly CMDS=(nft ip wg awk sed tr grep sleep)
 for cmd in "${CMDS[@]}"; do
     if ! command -v "$cmd" >/dev/null; then
         echo "ERROR: Required command '$cmd' is not installed or not in PATH." >&2
@@ -103,14 +109,14 @@ for ((i=1; i<=POLL_ATTEMPTS; i++)); do
             if [[ -z "$peer_endpoint" || "$peer_endpoint" == "(none)" ]]; then
                 continue
             fi
-            ip_raw=$(echo "$peer_endpoint" | sed -E 's/\[|\]//g; s/:[0-9]+$//')
-            port_raw=$(echo "$peer_endpoint" | awk -F: '{print $NF}')
-
-            # Validate IP format before adding to array.
-            if [[ "$ip_raw" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-                addrs4+=("$ip_raw")
-            elif [[ "$ip_raw" == *:* ]]; then
-                addrs6+=("$ip_raw")
+            # strip port & square-brackets, then validate via ip route get
+            ip_raw=${peer_endpoint%:*}           # drop “:PORT”
+            ip_raw=${ip_raw#\[}; ip_raw=${ip_raw%\]}  # drop leading ‘[’ and trailing ‘]’
+            port_raw=${peer_endpoint##*:}        # grab port
+            if ip -4 route get "$ip_raw" &>/dev/null; then
+              addrs4+=("$ip_raw")
+            elif ip -6 route get "$ip_raw" &>/dev/null; then
+              addrs6+=("$ip_raw")
             else
                 log_error "Parsed IP '$ip_raw' is not a valid IPv4 or IPv6 address. Skipping."
                 continue
@@ -141,24 +147,45 @@ if ! [[ "$EP_PORT" =~ ^[0-9]+$ && "$EP_PORT" -ge 1 && "$EP_PORT" -le 65535 ]]; t
 fi
 log_info "Discovered endpoint port: $EP_PORT"
 
-# --- Uplink Discovery (Robust Method) ---
-# Now that we have the endpoint IPs, we can find the exact route to them.
-# This is the most reliable way to find the physical uplink interface.
+# --- Uplink Discovery (Better Method) ---
 log_info "Detecting physical uplink interfaces via endpoint routes..."
-UPLINK_IF4=""
+UPLINK_IF4=""   # avoid unbound-variable under set -u
 UPLINK_IF6=""
+
+# helper to pick dev from an `ip route get` output
+_pick_dev() {
+  awk '/ dev/ {
+    for(i=1;i<=NF;i++) if($i=="dev") print $(i+1);
+    exit
+  }'
+}
+
 if (( ${#addrs4[@]} > 0 )); then
-  # look in the "main" table (ID 254) for the default gateway
-  UPLINK_IF4=$(
-    ip -4 route show table main default \
-      | awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") print $(i+1); exit}'
-  )
+  # try direct route-get first
+  candidate=$(ip -4 route get "${addrs4[0]}" 2>/dev/null | _pick_dev)
+  # if it pointed at our WG iface (or is empty), fall back to the default-gateway
+  if [[ -z "$candidate" || "$candidate" == "$IF" ]]; then
+    UPLINK_IF4=$(
+      ip -4 route show table main default \
+        | grep -v "dev $IF" \
+        | _pick_dev
+    )
+  else
+    UPLINK_IF4=$candidate
+  fi
 fi
+
 if (( ${#addrs6[@]} > 0 )); then
-  UPLINK_IF6=$(
-    ip -6 route show table main default \
-      | awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") print $(i+1); exit}'
-  )
+  candidate=$(ip -6 route get "${addrs6[0]}" 2>/dev/null | _pick_dev)
+  if [[ -z "$candidate" || "$candidate" == "$IF" ]]; then
+    UPLINK_IF6=$(
+      ip -6 route show table main default \
+        | grep -v "dev $IF" \
+        | _pick_dev
+    )
+  else
+    UPLINK_IF6=$candidate
+  fi
 fi
 
 if [[ -z "$UPLINK_IF4" && -z "$UPLINK_IF6" ]]; then
@@ -203,7 +230,7 @@ $( if [[ -n "$UPLINK_IF4" ]]; then
     echo "add rule inet $TABLE input iifname $UPLINK_IF4 icmp type { destination-unreachable, echo-reply, time-exceeded } accept"
     # Allow outbound WG traffic
     echo "add rule inet $TABLE output oifname $UPLINK_IF4 ip daddr @$SET4 udp dport $EP_PORT accept"
-    # CRITICAL: Allow inbound WG traffic
+    # Allow inbound WG traffic
     echo "add rule inet $TABLE input iifname $UPLINK_IF4 ip saddr @$SET4 udp sport $EP_PORT accept"
 fi )
 
@@ -213,15 +240,18 @@ $( if [[ -n "$UPLINK_IF6" ]]; then
     echo "add rule inet $TABLE input iifname $UPLINK_IF6 icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept"
     # Allow outbound WG traffic
     echo "add rule inet $TABLE output oifname $UPLINK_IF6 ip6 daddr @$SET6 udp dport $EP_PORT accept"
-    # CRITICAL: Allow inbound WG traffic
+    # allow outgoing NDP/RS so we can resolve MACs
+    echo "add rule inet $TABLE output oifname $UPLINK_IF6 icmpv6 type { nd-neighbor-solicit, nd-router-solicit } accept"
+    # Allow inbound WG traffic
     echo "add rule inet $TABLE input iifname $UPLINK_IF6 ip6 saddr @$SET6 udp sport $EP_PORT accept"
 fi )
 
 # Optional: Log and count any packets that are about to be dropped by the policy
+# Now ratelimited
 $( if [[ "$ENABLE_LOGGING" == "true" ]]; then
-    echo "add rule inet $TABLE input   log prefix \"[killswitch drop in]: \" counter"
-    echo "add rule inet $TABLE output  log prefix \"[killswitch drop out]: \" counter"
-    echo "add rule inet $TABLE forward log prefix \"[killswitch drop fwd]: \" counter"
+  echo "add rule inet $TABLE input   limit rate 5/second burst 10 log prefix \"[killswitch drop in]: \" counter"
+  echo "add rule inet $TABLE output  limit rate 5/second burst 10 log prefix \"[killswitch drop out]: \" counter"
+  echo "add rule inet $TABLE forward limit rate 5/second burst 10 log prefix \"[killswitch drop fwd]: \" counter"
 fi )
 EOF
 )
@@ -236,3 +266,4 @@ log_info "Killswitch for '$IF' is now ACTIVE."
 
 trap - EXIT INT TERM HUP
 exit 0
+
