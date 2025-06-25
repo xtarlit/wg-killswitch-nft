@@ -10,7 +10,7 @@ Intended to be used with commercial VPN services such as Mullvad, AirVPN, Crypto
  - Avoids sending DNS requests outside of the tunnel for hostname lookup in your VPN config.
  - Relatively paranoid.
 
-BSD 3-Clause License
+# BSD 3-Clause License
 
 Copyright (c) 2025, xtarlit
 
