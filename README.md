@@ -13,8 +13,10 @@ Intended to be used with commercial VPN services such as Mullvad, AirVPN, Crypto
 
 # "Anti-features"
  - The script resolves the VPN endpoint's domain name to an IP address once upon execution. If the server's IP address changes (due to load balancing, DDoS mitigation, or server migration), the killswitch will block the connection because the new IP is not in the nftables set
+   
     Possible solution: run a background process that periodically re-resolves the endpoint and updates the nftables set
  - The script doesn’t handle multiple peers on different ports: we overwrite $EP_PORT on every loop iteration. If you ever wire up two peers, your rules will only allow the last peer’s port, silently dropping the other.
+   
     Possible solution: either assert that there’s only one peer, or build a per-port set (or require uniform ports).
  - The script sets our three chains (input, output, forward) to policy drop but don’t install any ARP rules. ARP lives in the arp family, not inet, so still allowed by default. Usually good, but be aware you’re implicitly trusting link-layer.
  - We don’t allow any DNS queries to go out the physical uplink, which is intentional, but you must be 100% sure every process is pointed at an internal DNS resolver or your VPN's internal resolver. Otherwise DNS simply fails rather than “leaks.”
