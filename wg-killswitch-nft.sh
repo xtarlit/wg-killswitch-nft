@@ -1,14 +1,42 @@
 #!/usr/bin/env bash
-#
-# A robust, secure killswitch for WireGuard using nftables.
-# Usage: /path/to/wg-killswitch-nft {up|down} <wg-interface>"
 
-# New: Checks for sleep and grep,
-# rate limited logging,
-# revised IPv4 and IPv6 validation,
-# Fixed missing Egress ICMPv6 / NDP rules,
-# revised IPv6 Endpoint Parsing,
-# some attempts to ensure we always pick the correct uplink interface
+# github.com/xtarlit/wg-killswitch-nft
+# Paranoid Wireguard killswitch designed specifically for nftables. 
+#
+# Usage: /path/to/wg-killswitch-nft {up|down} <wg-interface>
+
+# BSD 3-Clause License
+# 
+# Copyright (c) 2025, xtarlit
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+# 
+# 3. Neither the name of the copyright holder nor the names of its
+#    contributors may be used to endorse or promote products derived from
+#    this software without specific prior written permission.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# prevent more than one instance of the script from running at the same time
+exec 200>"/tmp/wg-killswitch.lock" || { echo "Failed to create lock file" >&2; exit 1; }
+flock -x 200 || { echo "Another instance is running" >&2; exit 1; }
 
 set -euo pipefail
 
@@ -22,7 +50,7 @@ readonly ENABLE_LOGGING="false"    # Set to "true" to log and count dropped pack
 # --- Script setup ---
 # Set a sane, secure PATH and check for required commands.
 export PATH="/usr/sbin:/sbin:/usr/bin:/bin"
-readonly CMDS=(nft ip wg awk sed tr grep sleep)
+readonly CMDS=(nft ip wg awk sed tr grep sleep flock)
 for cmd in "${CMDS[@]}"; do
     if ! command -v "$cmd" >/dev/null; then
         echo "ERROR: Required command '$cmd' is not installed or not in PATH." >&2
@@ -218,14 +246,6 @@ add rule inet $TABLE output oifname "lo" accept
 add rule inet $TABLE input  iifname "$IF" accept
 add rule inet $TABLE output oifname "$IF" accept
 
-# Optional: Allow LAN traffic
-$( if [[ "$ALLOW_LAN" == "true" ]]; then
-    echo "add rule inet $TABLE output ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } accept"
-    echo "add rule inet $TABLE input  ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } accept"
-    echo "add rule inet $TABLE output ip6 daddr fc00::/7 accept"
-    echo "add rule inet $TABLE input  ip6 saddr fc00::/7 accept"
-fi )
-
 # Uplink rules (IPv4)
 $( if [[ -n "$UPLINK_IF4" ]]; then
     # Allow essential ICMP
@@ -248,6 +268,14 @@ $( if [[ -n "$UPLINK_IF6" ]]; then
     echo "add rule inet $TABLE input iifname $UPLINK_IF6 ip6 saddr @$SET6 udp sport $EP_PORT accept"
 fi )
 
+# Optional: Allow LAN traffic
+$( if [[ "$ALLOW_LAN" == "true" ]]; then
+    echo "add rule inet $TABLE output ip daddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } accept"
+    echo "add rule inet $TABLE input  ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } accept"
+    echo "add rule inet $TABLE output ip6 daddr fc00::/7 accept"
+    echo "add rule inet $TABLE input  ip6 saddr fc00::/7 accept"
+fi )
+
 # Optional: Log and count any packets that are about to be dropped by the policy
 # Now ratelimited
 $( if [[ "$ENABLE_LOGGING" == "true" ]]; then
@@ -268,4 +296,3 @@ log_info "Killswitch for '$IF' is now ACTIVE."
 
 trap - EXIT INT TERM HUP
 exit 0
-
