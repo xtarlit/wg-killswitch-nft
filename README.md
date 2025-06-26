@@ -1,12 +1,16 @@
 # wg-killswitch-nft
-An over-engineered Wireguard killswitch designed specifically for the modern "nftables" netfilter project for Linux machines. 
-Intended to be used with commercial VPN services such as Mullvad, AirVPN, Cryptostorm, AzireVPN, and many others, but can be used for or adapted to any Wireguard config. 
+An over-engineered Wireguard killswitch designed specifically for the modern "nftables" netfilter project for Linux machines. It's developed for use with commercial consumer-oriented VPN services in mind, but can be used for or adapted to any Wireguard config. 
+
+# What does it do? 
+The scope of this project is to provide a script that will prevent internet access if the VPN tunnel unexpectedly fails (interfering, misconfigured, or misbehaving software, buggy wireguard implementation, etc.) and block applications from sending traffic to any interface that isn't your VPN tunnel. (as an example, qBittorrent may attempt to bind to multiple interfaces by default. This can cause traffic to "leak" out of the VPN tunnel by going directly to your physical interface.) 
 
 # Features
  - Option to allow LAN traffic (disabled by default).
  - Option to log dropped packets (disabled by default).
  - No hard-coded path to your configs.
- - Full IPv6 compatibility.
+ - Full IPv6 compatibility and connectivity via the VPN interface if provided.
+ - Blocks almost everything (aside from the bare minimum required to maintain any connectivity) going to your physical interface(s) on both IPv4 and IPv6.
+ - Allows for loopback/localhost connectivity. 
  - Follows many security best practices (examples: set -euo pipefail, readonly variables, input validation, nftables with a default-drop policy) 
  - Avoids sending DNS requests outside of the tunnel for hostname lookup in your VPN config.
  - Relatively paranoid.
@@ -29,8 +33,6 @@ PostUp   =  /path/to/wg-killswitch-nft.sh up %i
 PostDown = /path/to/wg-killswitch-nft.sh down %i
 ```
 - The %i is important, that's how the script knows what our interface is called.
-
-"WireGuard" and the "WireGuard" logo are registered trademarks of Jason A. Donenfeld.
 
 # BSD 3-Clause License
 
@@ -61,5 +63,5 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# This script is intended for use with Wireguard
+# Wireguard
 - "WireGuard" and the "WireGuard" logo are registered trademarks of Jason A. Donenfeld.
