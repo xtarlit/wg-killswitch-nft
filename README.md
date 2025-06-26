@@ -8,7 +8,7 @@ The scope of this project is to provide a script that will
     (misconfigured, or misbehaving software, buggy wireguard implementation, etc.)
 - block applications from sending traffic to any interface that isn't your VPN tunnel.
   
-    (as an example of a scenario where this script is handy: qBittorrent may attempt to bind to multiple interfaces by default. This can cause traffic to "leak" out of the VPN tunnel by going directly to your physical interface(s). This script would prevent qBittorrent from being able to reach anything on the physical interface(s). ) 
+    (For example, qBittorrent binds to every network interface by default, letting some traffic bypass your VPN and go in/out via your physical NIC. This script blocks qBittorrent from touching any physical interface, preventing those leaks.) 
 
 # Features
  - Option to allow LAN traffic (disabled by default).
