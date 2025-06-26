@@ -19,6 +19,7 @@ The scope of this project is to provide a script that will
  - Allows for loopback/localhost connectivity. 
  - Follows many security best practices (examples: set -euo pipefail, readonly variables, input validation, nftables with a default-drop policy) 
  - Avoids sending DNS requests outside of the tunnel for hostname lookup in your VPN config.
+ - No legacy iptables commands are used; the script is specifically meant for nftables. 
  - Relatively paranoid.
 
 # "Anti-features"
